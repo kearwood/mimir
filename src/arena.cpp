@@ -71,7 +71,7 @@ size_t Arena::getUsed() const
 // This may be greater than the maxSize passed into init, due to page size alignment.
 size_t Arena::getMaxSize() const
 {
-  return m_region.getSize();
+  return m_region.getMaxSize();
 }
 
 std::byte* Arena::alloc(size_t size)
