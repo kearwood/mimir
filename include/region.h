@@ -49,6 +49,10 @@ public:
   size_t getMaxSize() const;
   std::byte* getAddress() const;
 
+  // Helper functions for allocators
+  bool maybeGrow(size_t minSize);
+  void maybeShrink(size_t targetSize);
+
 private:
   std::byte* m_data;
   size_t m_committedSize;

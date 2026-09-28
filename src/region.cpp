@@ -154,4 +154,32 @@ std::byte* Region::getAddress() const
   return m_data;
 }
 
-};
+bool Region::maybeGrow(size_t minSize)
+{
+  if (minSize < m_committedSize) {
+    // Already big enough
+    return true;
+  }
+
+  if (minSize > m_maxSize) {
+    // We can't grow this big
+    return false;
+  }
+
+  // We need to grow.
+  // Increase the size exponentially, capped to m_maxSize
+  size_t newSize = std::bit_ceil(minSize) << 1;
+  newSize = std::min(m_maxSize, newSize);
+  
+  return resize(newSize);
+}
+
+void Region::maybeShrink(size_t targetSize)
+{
+  size_t thresholdSize = targetSize << 1; // The threshold for shrinking is greater than the target to implement hysteresis
+  if (getSize() > thresholdSize) {
+    resize(targetSize);
+  }
+}
+
+} // namespace mimir

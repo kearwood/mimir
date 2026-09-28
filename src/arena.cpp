@@ -77,16 +77,8 @@ size_t Arena::getMaxSize() const
 std::byte* Arena::alloc(size_t size)
 {
   size_t neededSize = m_usedSize + size;
-  if (neededSize > m_region.getSize())
-  {
-    // Increase the size exponentially when we run out
-    size_t newSize = std::bit_ceil(neededSize) << 1;
-    if (newSize < m_minSize) {
-      newSize = m_minSize;
-    }
-    if (!m_region.resize(newSize)) {
-      return nullptr;
-    }
+  if (!m_region.maybeGrow(std::max(neededSize, m_minSize))) {
+    return nullptr;
   }
 
   std::byte* ret = m_region.getAddress() + m_usedSize;
@@ -128,13 +120,7 @@ void Arena::reset()
   m_watermark[kWatermarkLen - 1] = m_usedSize;
 
   size_t targetSize = std::bit_ceil(highWatermark) << 1;
-  if (targetSize < m_minSize) {
-    targetSize = m_minSize;
-  }
-  size_t thresholdSize = targetSize << 1; // The threshold for shrinking is greater than the target to implement hysteresis
-  if (m_region.getSize() > thresholdSize) {
-    m_region.resize(targetSize);
-  }
+  m_region.maybeShrink(std::max(m_minSize, targetSize));
 
   m_usedSize = 0;
 }
