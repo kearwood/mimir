@@ -87,6 +87,15 @@ private:
 
   // Get the usable size of a block
   size_t getBlockUsableSize(const TLSFBlock* block) const;
+
+  // Get the next block, in physical order
+  TLSFBlock* getNextPhysBlock(TLSFBlock* block);
+
+  // Returns true if block is a free block
+  bool isBlockFree(const TLSFBlock* block) const;
+
+  // Return true if block is the last block, in physical order
+  bool isBlockLast(const TLSFBlock* block) const;
 };
 
 } // namespace mimir

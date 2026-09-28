@@ -138,7 +138,28 @@ size_t Heap::getUsed() const
 
 size_t Heap::getBlockUsableSize(const TLSFBlock* block) const
 {
-  return (block->size & ~0b11) - 16;
+  return (block->size & ~0b11) - 16ULL;
+}
+
+TLSFBlock* Heap::getNextPhysBlock(TLSFBlock* block)
+{
+  if (isBlockLast(block)) {
+    return nullptr;
+  }
+
+  return (TLSFBlock*)((std::byte*)block + block->size);
+}
+
+// Return true if block is the last block in physical order
+bool Heap::isBlockLast(const TLSFBlock* block) const
+{
+  return (block->size & 0b10) == 0b10;
+}
+
+// Returns true if block is a free block
+bool Heap::isBlockFree(const TLSFBlock* block) const
+{
+  return (block->size & 0b01) == 0b01;
 }
 
 void Heap::insertFreeBlock(TLSFBlock* block)
@@ -277,6 +298,14 @@ std::byte* Heap::alloc(size_t size)
     return nullptr;
   }
 
+  // Ensure that we can commit pages to back the new block
+  // as well as a trailing free block header
+  size_t neededCommit = ((std::byte*)block - m_region.getAddress()) + size + 16ULL + 32ULL;
+  if (!m_region.maybeGrow(std::max(m_minSize, neededCommit))) {
+    // Out of system memory
+    return nullptr;
+  }
+
   removeFreeBlock(block);
 
   size_t usableSize = getBlockUsableSize(block);
@@ -289,16 +318,17 @@ std::byte* Heap::alloc(size_t size)
     freeBlock->prevPhys = block;
     freeBlock->prevFree = nullptr;
     freeBlock->nextFree = nullptr;
-    if (block->size & 0b10) { // LSB: T, F: T = Last physical block, F = Free block
+    if (isBlockLast(block))
+    { // LSB: T, F: T = Last physical block, F = Free block
       // Block was the last physical block
       block->size &= ~0b10;
       freeBlock->size &= 0b10;
     }
-    block->size -= freeBlock->size & ~0b10;
+    block->size -= freeBlock->size & ~0b11;
     insertFreeBlock(freeBlock);
   }
 
-  m_usedSize += size;
+  m_usedSize += getBlockUsableSize(block);
   return (std::byte*)block + 16;
 }
 
@@ -317,6 +347,49 @@ std::byte* Heap::allocA64(size_t size)
 // Free the allocation at `address`
 void Heap::free(std::byte* address)
 {
+  TLSFBlock* block = (TLSFBlock*)(address - 16ULL);
+  m_usedSize -= getBlockUsableSize(block);
+
+  TLSFBlock* prevPhys = block->prevPhys;
+  if (prevPhys && isBlockFree(prevPhys)) {
+    // The previous block in physical order is a free block.
+
+    // Remove it from the index
+    removeFreeBlock(prevPhys);
+
+    // Resize it to glob together with the block to free
+    prevPhys->size += (block->size & ~0b11);
+    block = prevPhys;
+  }
+
+  // Reset the free block flag and the last block flag
+  block->size &= ~0b11;
+  
+  TLSFBlock* nextPhys = getNextPhysBlock(block);  
+  if (nextPhys == nullptr) {
+    // This is the last block
+    block->size &= 0b10;
+  } else if (isBlockFree(nextPhys)) {
+    // The next block in physical order is a free block.
+
+    // remove it from the index
+    removeFreeBlock(nextPhys);
+
+    // Resize free'd block to glob together with the nextPhys block
+    block->size += (nextPhys->size & ~0b11);
+    if (isBlockLast(nextPhys)) {
+      block->size &= 0b10;
+    }
+  }
+
+  // Add the free'd block to the index
+  insertFreeBlock(block);
+
+  if (isBlockLast(block)) {
+    // Maybe free pages
+    size_t neededSize = ((std::byte*)block - m_region.getAddress()) + 32ULL;
+    m_region.maybeShrink(neededSize);
+  }
 }
 
 // Reset (or initialize) the heap, freeing all memory and potentially releasing comitted pages.
@@ -325,6 +398,10 @@ void Heap::reset()
   // Clear the index, representing no free blocks
   TLSFIndex* index = (TLSFIndex*)m_region.getAddress();
   memset(index, 0, sizeof(TLSFIndex));
+  m_usedSize = 0;
+
+  // Free comitted pages except minimum required
+  m_region.resize(m_minSize);
 
   // Start with one free block, filling the entire Region
   TLSFBlock* block = (TLSFBlock*)(m_region.getAddress() + sizeof(TLSFIndex));
