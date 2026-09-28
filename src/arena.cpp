@@ -96,8 +96,8 @@ std::byte* Arena::alloc(size_t size)
 
 std::byte* Arena::allocA16(size_t size)
 {
-  uint32_t nextByte = (m_usedSize + 15) & ~15;
-  uint32_t roundedSize = (size + 15) & ~15;
+  size_t nextByte = (m_usedSize + 15) & ~15;
+  size_t roundedSize = (size + 15) & ~15;
   if (alloc(roundedSize + nextByte - m_usedSize) == nullptr)     {
     return nullptr;
   }
@@ -107,8 +107,8 @@ std::byte* Arena::allocA16(size_t size)
 
 std::byte* Arena::allocA64(size_t size)
 {
-  uint32_t nextByte = (m_usedSize + 63) & ~63;
-  uint32_t roundedSize = (size + 63) & ~63;
+  size_t nextByte = (m_usedSize + 63) & ~63;
+  size_t roundedSize = (size + 63) & ~63;
   if (alloc(roundedSize + nextByte - m_usedSize) == nullptr) {
     return nullptr;
   }
