@@ -118,18 +118,7 @@ bool Heap::init(size_t minSize, size_t maxSize)
   if (!m_region.resize(m_minSize)) {
     return false;
   }
-  TLSFIndex* index = (TLSFIndex*)m_region.getAddress();
-  memset(index, 0, sizeof(TLSFIndex));
-
-  // Start with one free block, filling the entire Region
-  TLSFBlock* block = (TLSFBlock*)(m_region.getAddress() + sizeof(TLSFIndex));
-  block->prevPhys = nullptr;
-  block->nextFree = nullptr;
-  block->prevFree = nullptr;
-  block->size = m_region.getMaxSize();
-  block->size |= 0b10; // T=1: Last Block, F=1: Free Block
-
-  insertFreeBlock(block);
+  reset();
   return true;
 }
 
@@ -328,6 +317,24 @@ std::byte* Heap::allocA64(size_t size)
 // Free the allocation at `address`
 void Heap::free(std::byte* address)
 {
+}
+
+// Reset (or initialize) the heap, freeing all memory and potentially releasing comitted pages.
+void Heap::reset()
+{
+  // Clear the index, representing no free blocks
+  TLSFIndex* index = (TLSFIndex*)m_region.getAddress();
+  memset(index, 0, sizeof(TLSFIndex));
+
+  // Start with one free block, filling the entire Region
+  TLSFBlock* block = (TLSFBlock*)(m_region.getAddress() + sizeof(TLSFIndex));
+  block->prevPhys = nullptr;
+  block->nextFree = nullptr;
+  block->prevFree = nullptr;
+  block->size = m_region.getMaxSize();
+  block->size |= 0b10; // T=1: Last Block, F=1: Free Block
+
+  insertFreeBlock(block);
 }
 
 } // namespace mimir

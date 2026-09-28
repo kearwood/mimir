@@ -60,6 +60,9 @@ public:
   // Free the allocation at `address`
   void free(std::byte* address);
 
+  // Reset the heap, freeing all memory and potentially releasing comitted pages.
+  void reset();
+
   // Get the actual used size.
   // This may differ from the sum of allocations due to alignment requirements.
   size_t getUsed() const;
